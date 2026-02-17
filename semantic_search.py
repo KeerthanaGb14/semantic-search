@@ -10,15 +10,25 @@ class Query(BaseModel):
     rerankK: int = 7
 
 @app.get("/")
-def home():
-    return {"status": "server working"}
+def root():
+    return {"status": "running"}
 
 @app.post("/search")
 def search(q: Query):
+    results = []
+    for i in range(7):
+        results.append({
+            "id": i,
+            "score": round(1 - i*0.1, 2),
+            "content": f"Sample news document {i}",
+            "metadata": {"source": "news"}
+        })
+
     return {
-        "results": [
-            {"id": 1, "score": 0.9, "content": "sample doc", "metadata": {"source": "test"}}
-        ],
+        "results": results,
         "reranked": True,
-        "metrics": {"latency": 10, "totalDocs": 111}
+        "metrics": {
+            "latency": 50,
+            "totalDocs": 111
+        }
     }
