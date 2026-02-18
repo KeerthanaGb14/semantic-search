@@ -1,35 +1,40 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import time
 
 app = FastAPI()
 
-# ---- Dummy news documents ----
+# ---- CORS FIX ----
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---- Documents ----
 documents = [f"News article about climate change policy number {i}" for i in range(111)]
 
-# ---- Request schema ----
 class Query(BaseModel):
     query: str
     k: int = 12
     rerank: bool = True
     rerankK: int = 7
 
-# ---- Root ----
 @app.get("/")
 def home():
     return {"status": "server working"}
 
-# ---- Cosine similarity ----
 def cosine(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-# ---- Fake embeddings ----
 def embed(text):
     np.random.seed(abs(hash(text)) % (10**6))
     return np.random.rand(384)
 
-# ---- Search endpoint ----
 @app.post("/search")
 def search(q: Query):
     start = time.time()
@@ -41,11 +46,9 @@ def search(q: Query):
         score = cosine(query_vec, embed(doc))
         scored.append((i, score, doc))
 
-    # Initial retrieval
     scored.sort(key=lambda x: x[1], reverse=True)
     top_k = scored[:q.k]
 
-    # Re-rank (simple boost)
     reranked = []
     for i, s, doc in top_k[:q.rerankK]:
         new_score = min(1.0, s + 0.1)
