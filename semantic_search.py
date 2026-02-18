@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI
 import numpy as np
+import os
 
 app = FastAPI()
 
@@ -14,36 +16,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- MODELS ----------
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
 class SimilarityRequest(BaseModel):
     docs: list[str]
     query: str
 
-# ---------- EMBEDDING ----------
-def embed(text: str):
-    np.random.seed(abs(hash(text)) % (10**6))
-    return np.random.rand(384)
-
 def cosine(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    a = np.array(a)
+    b = np.array(b)
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
-# ---------- ROOT ----------
 @app.get("/")
 def home():
     return {"status": "running"}
 
-# ---------- SIMILARITY ENDPOINT ----------
 @app.post("/similarity")
 def similarity(data: SimilarityRequest):
-    query_vec = embed(data.query)
 
-    scored = []
+    # embed query once
+    q_emb = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=data.query
+    ).data[0].embedding
+
+    scores = []
+
     for doc in data.docs:
-        score = cosine(query_vec, embed(doc))
-        scored.append((doc, score))
+        d_emb = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=doc
+        ).data[0].embedding
 
-    scored.sort(key=lambda x: x[1], reverse=True)
+        sim = cosine(q_emb, d_emb)
+        scores.append((doc, sim))
 
-    top3 = [doc for doc, _ in scored[:3]]
+    scores.sort(key=lambda x: x[1], reverse=True)
+
+    top3 = [doc for doc, _ in scores[:3]]
 
     return {"matches": top3}
